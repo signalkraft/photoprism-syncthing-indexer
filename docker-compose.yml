@@ -1,0 +1,87 @@
+version: '3.5'
+
+services:
+  photoprism:
+    image: photoprism/photoprism:latest
+    # platform: "linux/arm"
+    depends_on:
+      - mariadb
+    # restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    ports:
+      - "2342:2342" # HTTP port (host:container)
+    environment:
+      PHOTOPRISM_ADMIN_PASSWORD: "secret"          # PLEASE CHANGE: Your initial admin password (min 4 characters)
+      PHOTOPRISM_SITE_URL: "http://localhost:2342/"  # Public server URL incl http:// or https:// and /path, :port is optional
+      PHOTOPRISM_ORIGINALS_LIMIT: 5000               # File size limit for originals in MB (increase for high-res video)
+      PHOTOPRISM_HTTP_COMPRESSION: "none"            # Improves transfer speed and bandwidth utilization (none or gzip)
+      PHOTOPRISM_WORKERS: 4                          # Limits the number of indexing workers to reduce system load
+      PHOTOPRISM_DEBUG: "false"                      # Run in debug mode (shows additional log messages)
+      PHOTOPRISM_PUBLIC: "false"                     # No authentication required (disables password protection)
+      PHOTOPRISM_READONLY: "false"                   # Don't modify originals directory (reduced functionality)
+      PHOTOPRISM_EXPERIMENTAL: "false"               # Enables experimental features
+      PHOTOPRISM_DISABLE_CHOWN: "false"              # Disables storage permission updates on startup
+      PHOTOPRISM_DISABLE_WEBDAV: "false"             # Disables built-in WebDAV server
+      PHOTOPRISM_DISABLE_SETTINGS: "false"           # Disables Settings in Web UI
+      PHOTOPRISM_DISABLE_TENSORFLOW: "false"         # Disables all features depending on TensorFlow
+      PHOTOPRISM_DISABLE_FACES: "false"              # Disables facial recognition
+      PHOTOPRISM_DISABLE_CLASSIFICATION: "false"     # Disables image classification
+      PHOTOPRISM_DARKTABLE_PRESETS: "true"           # Enables Darktable presets and disables concurrent RAW conversion
+      # PHOTOPRISM_FFMPEG_ENCODER: "h264_v4l2m2m"    # FFmpeg AVC encoder for video transcoding (default: libx264)
+      # PHOTOPRISM_FFMPEG_BUFFERS: "64"              # FFmpeg capture buffers (default: 32)
+      PHOTOPRISM_DETECT_NSFW: "false"                # Flag photos as private that MAY be offensive
+      PHOTOPRISM_UPLOAD_NSFW: "true"                 # Allow uploads that MAY be offensive
+      # PHOTOPRISM_DATABASE_DRIVER: "sqlite"         # SQLite is an embedded database that doesn't require a server
+      PHOTOPRISM_DATABASE_DRIVER: "mysql"            # Use MariaDB 10.5+ or MySQL 8+ instead of SQLite for improved performance
+      PHOTOPRISM_DATABASE_SERVER: "mariadb:3306"     # MariaDB or MySQL database server (hostname:port)
+      PHOTOPRISM_DATABASE_NAME: "photoprism"         # MariaDB or MySQL database schema name
+      PHOTOPRISM_DATABASE_USER: "photoprism"         # MariaDB or MySQL database user name
+      PHOTOPRISM_DATABASE_PASSWORD: "secret"       # MariaDB or MySQL database user password
+      PHOTOPRISM_SITE_TITLE: "PhotoPrism"
+      PHOTOPRISM_SITE_CAPTION: "Browse Your Life"
+      PHOTOPRISM_SITE_DESCRIPTION: ""
+      PHOTOPRISM_SITE_AUTHOR: ""
+      ## Set a non-root user, group, or custom umask if your Docker environment doesn't support this natively:
+      # PHOTOPRISM_UID: 1000
+      # PHOTOPRISM_GID: 1000
+      # PHOTOPRISM_UMASK: 0000
+      HOME: "/photoprism"
+    working_dir: "/photoprism"
+    volumes:
+      # Point originals to your Syncthing folder(s)
+      - "/storage/syncthing/Camera:/photoprism/originals/Camera"
+      - "./storage:/photoprism/storage"
+
+  ## Database Server (recommended)
+  ## see https://docs.photoprism.org/getting-started/faq/#should-i-use-sqlite-mariadb-or-mysql
+  mariadb:
+    restart: unless-stopped
+    image: arm64v8/mariadb:10.6
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    command: mysqld --transaction-isolation:READ-COMMITTED --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --max-connections=512 --innodb-rollback-on-timeout=OFF --innodb-lock-wait-timeout=120
+    volumes:
+      - "./database:/var/lib/mysql" # Never remove
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: photoprism
+      MYSQL_USER: photoprism
+      MYSQL_PASSWORD: secret
+
+  watcher:
+    build: watcher
+    restart: unless-stopped
+    volumes:
+      - ./watcher/syncthing-hooks:/root/.syncthing-hooks
+    environment:
+      # Customize these env vars
+      API_KEY: secret
+      PHOTOPRISM_SESSION_ID: secret
+      PHOTOPRISM_INDEX_URL: http://photoprism:2342/api/v1/index
+      ST_URL: http://syncthing:8384/rest/events
+    command: syncthing-hooks
+    # Use this command, if Syncthing runs on the Docker host
+    # command: /bin/ash connect-host.sh

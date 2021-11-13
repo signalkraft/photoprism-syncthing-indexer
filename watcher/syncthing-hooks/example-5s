@@ -1,0 +1,6 @@
+#!/bin/sh
+
+curl -H "X-Session-ID: $PHOTOPRISM_SESSION_ID" \
+     -H "Content-Type: application/json" \
+     -d '{"path":"/","convert":true,"rescan":false}' \
+     -X POST $PHOTOPRISM_INDEX_URL
