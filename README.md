@@ -1,0 +1,1 @@
+# photoprism-syncthing-indexer
